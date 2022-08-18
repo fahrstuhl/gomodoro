@@ -26,7 +26,7 @@ func main() {
 
 func onReady() {
 	workdur = 50 * time.Minute
-	pausedur = 10 * time.Second
+	pausedur = 10 * time.Minute
 
 	systray.SetTitle("Gomodoro")
 	systray.SetTooltip("Gomodoro Timer")
