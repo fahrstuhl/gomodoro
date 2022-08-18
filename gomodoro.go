@@ -25,7 +25,7 @@ func main() {
 }
 
 func onReady() {
-	workdur = 10 * time.Second
+	workdur = 50 * time.Minute
 	pausedur = 10 * time.Second
 
 	systray.SetTitle("Gomodoro")
