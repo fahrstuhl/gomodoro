@@ -63,7 +63,6 @@ func onExit() {
 
 func pauseScreen() {
 	num_screens, _ := sdl.GetNumVideoDisplays()
-	notify("found "+fmt.Sprint(num_screens)+"screens", "")
 	for idx := 0; idx < num_screens; idx++ {
 		bounds, _ := sdl.GetDisplayBounds(idx)
 		mode, _ := sdl.GetDesktopDisplayMode(idx)
