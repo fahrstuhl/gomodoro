@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"time"
+	_ "embed"
 
 	"github.com/getlantern/systray"
 	"github.com/godbus/dbus"
@@ -20,6 +21,9 @@ var pausedur time.Duration
 var tickdur time.Duration
 var time_left time.Duration
 var windows []*sdl.Window
+
+//go:embed "Kenney High Square.ttf"
+var font []byte
 
 func main() {
 	if err := sdl.Init(sdl.INIT_EVERYTHING); err != nil {
@@ -199,7 +203,8 @@ func updateIcon(status string) {
 		color.B = 128
 		color.A = 255
 	}
-	font, _ := ttf.OpenFont("./Kenney High Square.ttf", 22)
+	font_rwops, err := sdl.RWFromMem(font)
+	font, _ := ttf.OpenFontRW(font_rwops, 0, 22)
 	text, _ := font.RenderUTF8Blended(status, color)
 
 	square, _ := sdl.CreateRGBSurface(0, 22, 22, 32, 0xFF000000, 0x00FF0000, 0x0000FF00, 0x000000FF)
