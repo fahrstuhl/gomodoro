@@ -16,9 +16,11 @@ import (
 var work *time.Timer
 var pause *time.Timer
 var tick *time.Timer
+var announce *time.Timer
 var workdur time.Duration
 var pausedur time.Duration
 var tickdur time.Duration
+var announcedur time.Duration
 var time_left time.Duration
 var windows []*sdl.Window
 
@@ -41,6 +43,7 @@ func main() {
 func onReady() {
 	workdur = 50 * time.Minute
 	pausedur = 10 * time.Minute
+	announcedur = 2 * time.Minute
 	tickdur = time.Minute
 
 	systray.SetTitle("Gomodoro")
@@ -76,6 +79,14 @@ func onReady() {
 func onExit() {
 }
 
+func announcePause() {
+	notify(fmt.Sprintf("Session ends in %02.0f minutes.", time_left.Minutes()), "")
+}
+
+func announceSession() {
+	notify(fmt.Sprintf("Session starts in %02.0f minutes.", time_left.Minutes()), "")
+}
+
 func pauseScreen() {
 	num_screens, _ := sdl.GetNumVideoDisplays()
 	for idx := 0; idx < num_screens; idx++ {
@@ -107,6 +118,7 @@ func startSession() {
 	time_left = workdur
 	work = time.AfterFunc(workdur, startPause)
 	tick = time.AfterFunc(tickdur, ticked)
+	announce = time.AfterFunc(workdur - announcedur, announcePause)
 	notify("Work Started", "")
 	playMusic()
 	unpauseScreen()
@@ -116,19 +128,22 @@ func startSession() {
 func stopSession() {
 	time_left = 0
 	notify("Session Stopped", "")
-	if work != nil && !work.Stop() {
-		<-work.C
-	}
-	if pause != nil && !pause.Stop() {
-		<-pause.C
-	}
-	if tick != nil && !tick.Stop() {
-		<-tick.C
-	}
+	clearTimer(work)
 	work = nil
+	clearTimer(pause)
 	pause = nil
+	clearTimer(tick)
 	tick = nil
+	clearTimer(announce)
+	announce = nil
+	updateIcon("off")
 	unpauseScreen()
+}
+
+func clearTimer(timer *time.Timer) {
+	if timer != nil && !timer.Stop() {
+		<-timer.C
+	}
 }
 
 func startPause() {
@@ -136,6 +151,7 @@ func startPause() {
 	time_left = pausedur
 	notify("Pause Started", "")
 	pause = time.AfterFunc(pausedur, startSession)
+	announce = time.AfterFunc(pausedur - announcedur, announceSession)
 	pauseMusic()
 	pauseScreen()
 	updateIcon(time_left_fmt())
