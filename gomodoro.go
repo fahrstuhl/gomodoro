@@ -72,6 +72,7 @@ func onReady() {
 	mQuit := systray.AddMenuItem("Quit", "Quit Gomodoro")
 	go func() {
 		<-mQuit.ClickedCh
+		stopSession()
 		systray.Quit()
 	}()
 }
@@ -114,7 +115,7 @@ func unpauseScreen() {
 }
 
 func startSession() {
-	pause = nil
+	clearAllTimers()
 	time_left = workdur
 	work = time.AfterFunc(workdur, startPause)
 	tick = time.AfterFunc(tickdur, ticked)
@@ -127,15 +128,8 @@ func startSession() {
 
 func stopSession() {
 	time_left = 0
+	clearAllTimers()
 	notify("Session Stopped", "")
-	clearTimer(work)
-	work = nil
-	clearTimer(pause)
-	pause = nil
-	clearTimer(tick)
-	tick = nil
-	clearTimer(announce)
-	announce = nil
 	updateIcon("off")
 	unpauseScreen()
 }
@@ -144,6 +138,17 @@ func clearTimer(timer *time.Timer) {
 	if timer != nil && !timer.Stop() {
 		<-timer.C
 	}
+}
+
+func clearAllTimers() {
+	clearTimer(work)
+	work = nil
+	clearTimer(pause)
+	pause = nil
+	clearTimer(tick)
+	tick = nil
+	clearTimer(announce)
+	announce = nil
 }
 
 func startPause() {
@@ -201,14 +206,30 @@ func ticked() {
 	updateIcon(time_left_fmt())
 }
 
+func isWork() bool {
+	return work != nil
+}
+
+func isPause() bool {
+	return work != nil
+}
+
+func isRunning() bool {
+	return isPause() || isWork()
+}
+
+func isStopped() bool {
+	return !isRunning()
+}
+
 func updateIcon(status string) {
 	var color sdl.Color
-	if work != nil {
+	if isWork() {
 		color.R = 0
 		color.G = 255
 		color.B = 0
 		color.A = 255
-	} else if pause != nil {
+	} else if isPause() {
 		color.R = 255
 		color.G = 0
 		color.B = 0
