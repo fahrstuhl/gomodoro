@@ -13,10 +13,16 @@ import (
 	"github.com/veandco/go-sdl2/ttf"
 )
 
-var work *time.Timer
-var pause *time.Timer
+type State int
+
+const (
+	STOPPED State = iota
+	WORKING
+	PAUSED
+)
+
+var state State
 var tick *time.Timer
-var announce *time.Timer
 var workdur time.Duration
 var pausedur time.Duration
 var tickdur time.Duration
@@ -43,8 +49,9 @@ func main() {
 func onReady() {
 	workdur = 50 * time.Minute
 	pausedur = 10 * time.Minute
-	announcedur = 2 * time.Minute
-	tickdur = time.Minute
+	announcedur = 5 * time.Minute
+	tickdur = time.Second
+	state = STOPPED
 
 	systray.SetTitle("Gomodoro")
 	systray.SetTooltip("Gomodoro Timer")
@@ -69,6 +76,16 @@ func onReady() {
 		}
 	}()
 
+	mPause := systray.AddMenuItem("Start Pause", "Pause Pomodoro Session")
+	go func() {
+		for {
+			select {
+			case <-mPause.ClickedCh:
+				startPause()
+			}
+		}
+	}()
+
 	mQuit := systray.AddMenuItem("Quit", "Quit Gomodoro")
 	go func() {
 		<-mQuit.ClickedCh
@@ -89,6 +106,7 @@ func announceSession() {
 }
 
 func pauseScreen() {
+	unpauseScreen()
 	num_screens, _ := sdl.GetNumVideoDisplays()
 	for idx := 0; idx < num_screens; idx++ {
 		bounds, _ := sdl.GetDisplayBounds(idx)
@@ -115,51 +133,45 @@ func unpauseScreen() {
 }
 
 func startSession() {
-	clearAllTimers()
+	state = WORKING
+	clearTickTimer()
 	time_left = workdur
-	work = time.AfterFunc(workdur, startPause)
 	tick = time.AfterFunc(tickdur, ticked)
-	announce = time.AfterFunc(workdur - announcedur, announcePause)
-	notify("Work Started", "")
-	playMusic()
 	unpauseScreen()
 	updateIcon(time_left_fmt())
+	playMusic()
+	notify("Work Started", "")
 }
 
 func stopSession() {
+	state = STOPPED
 	time_left = 0
-	clearAllTimers()
-	notify("Session Stopped", "")
+	clearTickTimer()
 	updateIcon("off")
 	unpauseScreen()
+	notify("Session Stopped", "")
+}
+
+func startPause() {
+	state = PAUSED
+	clearTickTimer()
+	time_left = pausedur
+	tick = time.AfterFunc(tickdur, ticked)
+	pauseScreen()
+	updateIcon(time_left_fmt())
+	pauseMusic()
+	notify("Pause Started", "")
+}
+
+func clearTickTimer() {
+	clearTimer(tick)
+	tick = nil
 }
 
 func clearTimer(timer *time.Timer) {
 	if timer != nil && !timer.Stop() {
 		<-timer.C
 	}
-}
-
-func clearAllTimers() {
-	clearTimer(work)
-	work = nil
-	clearTimer(pause)
-	pause = nil
-	clearTimer(tick)
-	tick = nil
-	clearTimer(announce)
-	announce = nil
-}
-
-func startPause() {
-	work = nil
-	time_left = pausedur
-	notify("Pause Started", "")
-	pause = time.AfterFunc(pausedur, startSession)
-	announce = time.AfterFunc(pausedur - announcedur, announceSession)
-	pauseMusic()
-	pauseScreen()
-	updateIcon(time_left_fmt())
 }
 
 func pauseMusic() {
@@ -204,14 +216,28 @@ func ticked() {
 	time_left -= tickdur
 	tick.Reset(tickdur)
 	updateIcon(time_left_fmt())
+	if time_left == 0 {
+		if state == PAUSED {
+			startSession()
+		} else if state == WORKING {
+			startPause()
+		}
+	}
+	if time_left == announcedur {
+		if state == PAUSED {
+			announceSession()
+		} else if state == WORKING {
+			announcePause()
+		}
+	}
 }
 
 func isWork() bool {
-	return work != nil
+	return state == WORKING
 }
 
 func isPause() bool {
-	return work != nil
+	return state == PAUSED
 }
 
 func isRunning() bool {
@@ -219,7 +245,7 @@ func isRunning() bool {
 }
 
 func isStopped() bool {
-	return !isRunning()
+	return state == STOPPED
 }
 
 func updateIcon(status string) {
