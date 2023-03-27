@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"path"
 	"time"
+	"encoding/json"
 	_ "embed"
 
 	"github.com/getlantern/systray"
@@ -11,6 +13,8 @@ import (
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/img"
 	"github.com/veandco/go-sdl2/ttf"
+	"github.com/badkaktus/gorocket"
+	"github.com/adrg/xdg"
 )
 
 type State int
@@ -21,6 +25,11 @@ const (
 	PAUSED
 )
 
+type Configuration struct {
+	User	string
+	Token   string
+}
+
 var state State
 var tick *time.Timer
 var workdur time.Duration
@@ -29,6 +38,8 @@ var tickdur time.Duration
 var announcedur time.Duration
 var time_left time.Duration
 var windows []*sdl.Window
+var rocket_client *gorocket.Client
+var conf Configuration
 
 //go:embed "Kenney High Square.ttf"
 var font []byte
@@ -43,6 +54,37 @@ func main() {
 	}
 	defer ttf.Quit()
 	updateIcon("off")
+
+	config_dir := path.Join(xdg.ConfigHome, "gomodoro")
+	config_path := path.Join(config_dir, "config.json")
+
+	err := os.MkdirAll(config_dir, 0700)
+	if err != nil {
+		panic(err)
+	}
+	if _, err := os.Stat(config_path); err != nil {
+		config_message := fmt.Sprintf("No Rocketchat credentials in \n%s\n", config_path)
+		notify(config_message, "")
+		fmt.Printf(config_message)
+	} else {
+		file, _ := os.Open(config_path)
+		defer file.Close()
+		decoder := json.NewDecoder(file)
+		conf := Configuration{}
+		err := decoder.Decode(&conf)
+		if err != nil {
+			msg := fmt.Sprintf("Error %s, can't decode config at\n%s: %s\n", err, config_path)
+			fmt.Println(msg)
+			notify(msg, "")
+		} else {
+			rocket_client = gorocket.NewWithOptions("https://chat.avm.de",
+				gorocket.WithUserID(conf.User),
+				gorocket.WithXToken(conf.Token),
+				gorocket.WithTimeout(1 * time.Second),
+			)
+		}
+	}
+
 	systray.Run(onReady, onExit)
 }
 
@@ -132,8 +174,16 @@ func unpauseScreen() {
 	windows = nil
 }
 
+func set_chat_status(status string) {
+	if rocket_client != nil {
+		new_status := gorocket.SetStatus{Message: "", Status: status}
+		rocket_client.UsersSetStatus(&new_status)
+	}
+}
+
 func startSession() {
 	state = WORKING
+	set_chat_status("busy")
 	clearTickTimer()
 	time_left = workdur
 	tick = time.AfterFunc(tickdur, ticked)
@@ -145,6 +195,7 @@ func startSession() {
 
 func stopSession() {
 	state = STOPPED
+	set_chat_status("online")
 	time_left = 0
 	clearTickTimer()
 	updateIcon("off")
@@ -154,6 +205,7 @@ func stopSession() {
 
 func startPause() {
 	state = PAUSED
+	set_chat_status("online")
 	clearTickTimer()
 	time_left = pausedur
 	tick = time.AfterFunc(tickdur, ticked)
